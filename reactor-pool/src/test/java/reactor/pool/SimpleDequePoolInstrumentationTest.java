@@ -17,6 +17,7 @@
 package reactor.pool;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
 
@@ -372,6 +373,29 @@ class SimpleDequePoolInstrumentationTest {
 		assertThat(pool.isInactiveForMoreThan(Duration.ofSeconds(5)))
 				.as("isInactiveForMoreThan(5s)")
 				.isTrue();
+	}
+
+	@Test
+	void cancelAllocatorWhenAcquireCanceled() {
+		VirtualTimeScheduler vts = VirtualTimeScheduler.create();
+		AtomicReference<String> result = new AtomicReference<>();
+		Mono.<String>create(sink -> {
+					SimpleDequePool<Long> pool = new SimpleDequePool<>(
+							PoolBuilder.from(
+											Mono.delay(Duration.ofSeconds(5), vts)
+													.doOnSuccess(__ -> sink.success("acquired"))
+													.doOnCancel(() -> sink.success("canceled"))
+									)
+									.clock(SchedulerClock.of(vts))
+									.buildConfig());
+					pool.acquire()
+							// Borrower canceled
+							.timeout(Duration.ofSeconds(3), Mono.empty(), vts)
+							.subscribe();
+				})
+				.subscribe(result::set);
+		vts.advanceTimeBy(Duration.ofSeconds(5).plusMillis(100));
+		assertThat(result.get()).isEqualTo("canceled");
 	}
 
 }
