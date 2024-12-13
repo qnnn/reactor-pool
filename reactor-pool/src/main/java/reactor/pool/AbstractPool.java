@@ -395,7 +395,7 @@ abstract class AbstractPool<POOLABLE> implements InstrumentedPool<POOLABLE>, Ins
 		long pendingAcquireStart;
 		Disposable timeoutTask;
 
-		Disposable cancelTask = Disposables.disposed();
+		Disposable.Composite cancelTask = Disposables.composite();
 
 		Borrower(CoreSubscriber<? super AbstractPooledRef<POOLABLE>> actual,
 				AbstractPool<POOLABLE> pool,
@@ -484,16 +484,7 @@ abstract class AbstractPool<POOLABLE> implements InstrumentedPool<POOLABLE>, Ins
 		}
 
 		void onCancel(Disposable disposable){
-			if (get()) {
-				disposable.dispose();
-			}
-			else {
-				Disposable task = this.cancelTask;
-				this.cancelTask = () -> {
-					task.dispose();
-					disposable.dispose();
-				};
-			}
+			cancelTask.add(disposable);
 		}
 
 		@Override
